@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
+            background-color: #007bff;
             margin: 0;
             padding: 20px;
         }
@@ -23,12 +23,15 @@
 
         h1 {
             text-align: center;
+            font-size: 1.8rem;
         }
 
         .week-navigation {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         button {
@@ -38,28 +41,50 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            font-size: 1rem;
         }
 
         button:hover {
             background-color: #0056b3;
         }
 
+        #weekInterval {
+            flex: 1;
+            text-align: center;
+            margin: 10px 0;
+            font-size: 1.2rem;
+        }
+
         .week-table {
             display: flex;
             flex-direction: column;
-            overflow-x: auto;
         }
 
         .day-table {
             border: 1px solid #ccc;
             margin-bottom: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        h3 {
+            margin: 0;
+            padding: 10px;
+            background-color: #f2f2f2;
+            border-bottom: 1px solid #ccc;
+            font-size: 1.2rem;
+        }
+
+        table {
             width: 100%;
+            border-collapse: collapse;
         }
 
         th, td {
             border: 1px solid #ccc;
             padding: 10px;
             text-align: left;
+            font-size: 0.9rem;
         }
 
         th {
@@ -89,7 +114,9 @@
             margin: 5% auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 80%;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 5px;
         }
 
         .close {
@@ -104,6 +131,76 @@
             color: black;
             text-decoration: none;
             cursor: pointer;
+        }
+
+        form label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 1rem;
+        }
+
+        form input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        form button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        form button:hover {
+            background-color: #0056b3;
+        }
+
+        .add-event button {
+            margin-right: 10px;
+        }
+
+        .delete-button {
+            background-color: #d9534f;
+        }
+
+        .delete-button:hover {
+            background-color: #c9302c;
+        }
+
+        .clear-day-button {
+            background-color: #c9302c;
+        }
+
+        .clear-day-button:hover {
+            background-color: #a52a2a;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            button {
+                font-size: 0.9rem;
+                padding: 8px;
+            }
+
+            th, td {
+                font-size: 0.8rem;
+                padding: 8px;
+            }
+
+            h3 {
+                font-size: 1rem;
+                padding: 8px;
+            }
         }
     </style>
 </head>
@@ -149,7 +246,8 @@
 
         function formatWeekInterval() {
             const startOfWeek = new Date(currentDate);
-            startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+            const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
+            startOfWeek.setDate(currentDate.getDate() + dayShift);
 
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -161,7 +259,8 @@
         function renderCalendar() {
             calendar.innerHTML = '';
             const startOfWeek = new Date(currentDate);
-            startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+            const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
+            startOfWeek.setDate(currentDate.getDate() + dayShift);
 
             for (let i = 0; i < 7; i++) {
                 const day = new Date(startOfWeek);
@@ -169,10 +268,11 @@
                 const dayKey = day.toISOString().split('T')[0];
                 const dayTable = document.createElement('div');
                 dayTable.className = 'day-table';
-                dayTable.innerHTML = `
-                    <h3>${day.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })}</h3>
+                dayTable.innerHTML = 
+                    `<h3>${day.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })}</h3>
                     <div class="add-event">
-                        <button onclick="openModal(${i})">Добавить мероприятие</button>
+                        <button style="background-color: green;" onclick="openModal(${i})">Добавить мероприятие</button>
+                        <button class="clear-day-button" onclick="clearDay('${dayKey}')">Очистить день</button>
                     </div>
                     <table>
                         <thead>
@@ -183,111 +283,122 @@
                             </tr>
                         </thead>
                         <tbody id="day-${i}"></tbody>
-                    </table>
-                `;
+                    </table>`;
                 calendar.appendChild(dayTable);
 
                 if (events[dayKey]) {
                     const dayEvents = document.getElementById(`day-${i}`);
-                    events[dayKey].forEach(event => {
+                    const sortedEvents = events[dayKey].sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+                    sortedEvents.forEach(event => {
                         const newRow = document.createElement('tr');
-                        newRow.innerHTML = `
-                            <td>${event.startTime} - ${event.endTime}</td>
+                        newRow.innerHTML = 
+                            `<td>${event.startTime} - ${event.endTime}</td>
                             <td>${event.description}</td>
                             <td>
-                                <button onclick="openModal(${i}, this.parentElement.parentElement)">Изменить</button>
-                                <button onclick="deleteEvent(this, '${dayKey}')">Удалить</button>
-                                </td>
-                            `;
-                            dayEvents.appendChild(newRow);
-                        });
-                    }
+                                <button class="delete-button" onclick="deleteEvent('${dayKey}', '${event.startTime}')">Удалить</button>
+                                <button style="background-color: orange;" onclick="editEvent('${dayKey}', '${event.startTime}')">Изменить</button>
+                            </td>`;
+                        dayEvents.appendChild(newRow);
+                    });
                 }
             }
+        }
 
-            function deleteEvent(button, dayKey) {
-                const row = button.parentElement.parentElement;
-                const index = Array.from(row.parentElement.children).indexOf(row);
-                events[dayKey].splice(index, 1);
-                if (events[dayKey].length === 0) delete events[dayKey];
-                saveEvents();
-                renderCalendar();
+        function openModal(dayIndex) {
+            selectedDayIndex = dayIndex;
+            editingRow = null;
+            document.getElementById('eventForm').reset();
+            document.getElementById('myModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('myModal').style.display = 'none';
+        }
+
+        function saveEvent(event) {
+            event.preventDefault();
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            const description = document.getElementById('eventDescription').value;
+
+            const startOfWeek = new Date(currentDate);
+            const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
+            startOfWeek.setDate(currentDate.getDate() + dayShift);
+            const eventDate = new Date(startOfWeek);
+            eventDate.setDate(startOfWeek.getDate() + selectedDayIndex);
+            const dayKey = eventDate.toISOString().split('T')[0];
+
+            if (!events[dayKey]) {
+                events[dayKey] = [];
             }
 
-            function openModal(dayIndex, row = null) {
-                selectedDayIndex = dayIndex;
-                editingRow = row;
-                const modal = document.getElementById('myModal');
-                modal.style.display = 'block';
-
-                if (row) {
-                    const cells = row.children;
-                    const times = cells[0].textContent.split(' - ');
-                    document.getElementById('startTime').value = times[0];
-                    document.getElementById('endTime').value = times[1];
-                    document.getElementById('eventDescription').value = cells[1].textContent;
-                } else {
-                    document.getElementById('startTime').value = '';
-                    document.getElementById('endTime').value = '';
-                    document.getElementById('eventDescription').value = '';
+            if (editingRow) {
+                const eventIndex = events[dayKey].findIndex(evt => evt.startTime === editingRow);
+                if (eventIndex > -1) {
+                    events[dayKey][eventIndex] = { startTime, endTime, description };
                 }
+            } else {
+                events[dayKey].push({ startTime, endTime, description });
             }
 
-            function closeModal() {
-                document.getElementById('myModal').style.display = 'none';
+            saveEvents();
+            renderCalendar();
+            closeModal();
+        }
+
+        function editEvent(dayKey, startTime) {
+            selectedDayIndex = null;
+            editingRow = startTime;
+
+            const event = events[dayKey].find(evt => evt.startTime === startTime);
+            if (event) {
+                document.getElementById('startTime').value = event.startTime;
+                document.getElementById('endTime').value = event.endTime;
+                document.getElementById('eventDescription').value = event.description;
+                document.getElementById('myModal').style.display = 'block';
+            }
+        }
+
+        function deleteEvent(dayKey, startTime) {
+            events[dayKey] = events[dayKey].filter(event => event.startTime !== startTime);
+            if (events[dayKey].length === 0) {
+                delete events[dayKey];
             }
 
-            document.querySelector('.close').onclick = closeModal;
+            saveEvents();
+            renderCalendar();
+        }
 
-            window.onclick = function(event) {
-                const modal = document.getElementById('myModal');
-                if (event.target === modal) {
-                    closeModal();
-                }
-            };
+        function clearDay(dayKey) {
+            delete events[dayKey];
+            saveEvents();
+            renderCalendar();
+        }
 
-            document.getElementById('eventForm').onsubmit = function(event) {
-                event.preventDefault();
+        document.getElementById('eventForm').addEventListener('submit', saveEvent);
 
-                const startTime = document.getElementById('startTime').value;
-                const endTime = document.getElementById('endTime').value;
-                const description = document.getElementById('eventDescription').value;
-
-                const startOfWeek = new Date(currentDate);
-                startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-
-                const day = new Date(startOfWeek);
-                day.setDate(startOfWeek.getDate() + selectedDayIndex);
-
-                const dayKey = day.toISOString().split('T')[0];
-                if (!events[dayKey]) events[dayKey] = [];
-
-                if (editingRow) {
-                    const index = Array.from(editingRow.parentElement.children).indexOf(editingRow);
-                    events[dayKey][index] = { startTime, endTime, description };
-                } else {
-                    events[dayKey].push({ startTime, endTime, description });
-                }
-
-                saveEvents();
-                renderCalendar();
+        document.querySelector('.close').onclick = closeModal;
+        window.onclick = function(event) {
+            if (event.target === document.getElementById('myModal')) {
                 closeModal();
-            };
+            }
+        };
 
-            document.getElementById('prevWeek').onclick = function() {
-                currentDate.setDate(currentDate.getDate() - 7);
-                formatWeekInterval();
-                renderCalendar();
-            };
-
-            document.getElementById('nextWeek').onclick = function() {
-                currentDate.setDate(currentDate.getDate() + 7);
-                formatWeekInterval();
-                renderCalendar();
-            };
-
+        document.getElementById('prevWeek').onclick = function() {
+            currentDate.setDate(currentDate.getDate() - 7);
             formatWeekInterval();
             renderCalendar();
-        </script>
+        };
+
+        document.getElementById('nextWeek').onclick = function() {
+            currentDate.setDate(currentDate.getDate() + 7);
+            formatWeekInterval();
+            renderCalendar();
+        };
+
+        formatWeekInterval();
+        renderCalendar();
+    </script>
 </body>
 </html>
