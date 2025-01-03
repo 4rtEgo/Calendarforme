@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Календарь</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .week-navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .week-table {
+            display: flex;
+            flex-direction: column;
+            overflow-x: auto;
+        }
+
+        .day-table {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .add-event {
+            margin: 10px;
+            text-align: center;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Календарь</h1>
+        <div class="week-navigation">
+            <button id="prevWeek">Предыдущая неделя</button>
+            <span id="weekInterval">...</span>
+            <button id="nextWeek">Следующая неделя</button>
+        </div>
+        <div class="week-table" id="calendar"></div>
+    </div>
+
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Добавить мероприятие</h2>
+            <form id="eventForm">
+                <label for="startTime">Время начала:</label>
+                <input type="time" id="startTime" required>
+                <label for="endTime">Время окончания:</label>
+                <input type="time" id="endTime" required>
+                <label for="eventDescription">Описание:</label>
+                <input type="text" id="eventDescription" placeholder="Описание мероприятия" required>
+                <button type="submit">Сохранить мероприятие</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const calendar = document.getElementById('calendar');
+        const weekInterval = document.getElementById('weekInterval');
+        let currentDate = new Date();
+        let selectedDayIndex = null;
+        let editingRow = null;
+
+        const events = JSON.parse(localStorage.getItem('events')) || {};
+
+        function saveEvents() {
+            localStorage.setItem('events', JSON.stringify(events));
+        }
+
+        function formatWeekInterval() {
+            const startOfWeek = new Date(currentDate);
+            startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+            const options = { day: 'numeric', month: 'short' };
+            weekInterval.textContent = `${startOfWeek.toLocaleDateString('ru-RU', options)} - ${endOfWeek.toLocaleDateString('ru-RU', options)}`;
+        }
+
+        function renderCalendar() {
+            calendar.innerHTML = '';
+            const startOfWeek = new Date(currentDate);
+            startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+
+            for (let i = 0; i < 7; i++) {
+                const day = new Date(startOfWeek);
+                day.setDate(startOfWeek.getDate() + i);
+                const dayKey = day.toISOString().split('T')[0];
+                const dayTable = document.createElement('div');
+                dayTable.className = 'day-table';
+                dayTable.innerHTML = `
+                    <h3>${day.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })}</h3>
+                    <div class="add-event">
+                        <button onclick="openModal(${i})">Добавить мероприятие</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Время</th>
+                                <th>Описание</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="day-${i}"></tbody>
+                    </table>
+                `;
+                calendar.appendChild(dayTable);
+
+                if (events[dayKey]) {
+                    const dayEvents = document.getElementById(`day-${i}`);
+                    events[dayKey].forEach(event => {
+                        const newRow = document.createElement('tr');
+                        newRow.innerHTML = `
+                            <td>${event.startTime} - ${event.endTime}</td>
+                            <td>${event.description}</td>
+                            <td>
+                                <button onclick="openModal(${i}, this.parentElement.parentElement)">Изменить</button>
+                                <button onclick="deleteEvent(this, '${dayKey}')">Удалить</button>
+                                </td>
+                            `;
+                            dayEvents.appendChild(newRow);
+                        });
+                    }
+                }
+            }
+
+            function deleteEvent(button, dayKey) {
+                const row = button.parentElement.parentElement;
+                const index = Array.from(row.parentElement.children).indexOf(row);
+                events[dayKey].splice(index, 1);
+                if (events[dayKey].length === 0) delete events[dayKey];
+                saveEvents();
+                renderCalendar();
+            }
+
+            function openModal(dayIndex, row = null) {
+                selectedDayIndex = dayIndex;
+                editingRow = row;
+                const modal = document.getElementById('myModal');
+                modal.style.display = 'block';
+
+                if (row) {
+                    const cells = row.children;
+                    const times = cells[0].textContent.split(' - ');
+                    document.getElementById('startTime').value = times[0];
+                    document.getElementById('endTime').value = times[1];
+                    document.getElementById('eventDescription').value = cells[1].textContent;
+                } else {
+                    document.getElementById('startTime').value = '';
+                    document.getElementById('endTime').value = '';
+                    document.getElementById('eventDescription').value = '';
+                }
+            }
+
+            function closeModal() {
+                document.getElementById('myModal').style.display = 'none';
+            }
+
+            document.querySelector('.close').onclick = closeModal;
+
+            window.onclick = function(event) {
+                const modal = document.getElementById('myModal');
+                if (event.target === modal) {
+                    closeModal();
+                }
+            };
+
+            document.getElementById('eventForm').onsubmit = function(event) {
+                event.preventDefault();
+
+                const startTime = document.getElementById('startTime').value;
+                const endTime = document.getElementById('endTime').value;
+                const description = document.getElementById('eventDescription').value;
+
+                const startOfWeek = new Date(currentDate);
+                startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+
+                const day = new Date(startOfWeek);
+                day.setDate(startOfWeek.getDate() + selectedDayIndex);
+
+                const dayKey = day.toISOString().split('T')[0];
+                if (!events[dayKey]) events[dayKey] = [];
+
+                if (editingRow) {
+                    const index = Array.from(editingRow.parentElement.children).indexOf(editingRow);
+                    events[dayKey][index] = { startTime, endTime, description };
+                } else {
+                    events[dayKey].push({ startTime, endTime, description });
+                }
+
+                saveEvents();
+                renderCalendar();
+                closeModal();
+            };
+
+            document.getElementById('prevWeek').onclick = function() {
+                currentDate.setDate(currentDate.getDate() - 7);
+                formatWeekInterval();
+                renderCalendar();
+            };
+
+            document.getElementById('nextWeek').onclick = function() {
+                currentDate.setDate(currentDate.getDate() + 7);
+                formatWeekInterval();
+                renderCalendar();
+            };
+
+            formatWeekInterval();
+            renderCalendar();
+        </script>
+</body>
+</html>
