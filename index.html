@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Календарь</title>
     <style>
+		/* Основные стили для тела страницы */
         body {
             font-family: Arial, sans-serif;
             background-color: #007bff;
             margin: 0;
             padding: 20px;
         }
-
+		
+		/* Контейнер для календаря */
         .container {
             max-width: 800px;
             margin: auto;
@@ -95,43 +97,45 @@
             margin: 10px;
             text-align: center;
         }
-
+		
+		/* Стили для модальных окон */
         .modal {
-            display: none;
-            position: fixed;
-            z-index: 1;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.4);
-            padding-top: 60px;
-        }
+			display: none;
+			position: fixed;
+			z-index: 1;
+			left: 0;
+			top: 0;
+			width: 100%;
+			height: 100%;
+			overflow: auto;
+			background-color: rgba(0,0,0,0.4);
+			padding-top: 60px;
+		}
 
-        .modal-content {
-            background-color: #fefefe;
-            margin: 5% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 90%;
-            max-width: 500px;
-            border-radius: 5px;
-        }
+		.modal-content {
+			background-color: #fefefe;
+			margin: 5% auto;
+			padding: 20px;
+			border: 1px solid #888;
+			width: 90%;
+			max-width: 500px;
+			border-radius: 5px;
+		}
 
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-        }
+		.close {
+			color: #aaa;
+			float: right;
+			font-size: 28px;
+			font-weight: bold;
+		}
 
-        .close:hover,
-        .close:focus {
-            color: black;
-            text-decoration: none;
-            cursor: pointer;
-        }
+		.close:hover,
+		.close:focus {
+			color: black;
+			text-decoration: none;
+			cursor: pointer;
+		}
+
 
         form label {
             display: block;
@@ -181,6 +185,7 @@
         .clear-day-button:hover {
             background-color: #a52a2a;
         }
+		
 
         @media (max-width: 600px) {
             h1 {
@@ -207,16 +212,19 @@
 <body>
     <div class="container">
         <h1>Календарь</h1>
+		<h1><input type="week" id="weekInput"></h1>
         <div class="week-navigation">
             <button id="prevWeek">Предыдущая неделя</button>
             <span id="weekInterval">...</span>
             <button id="nextWeek">Следующая неделя</button>
         </div>
+		<!-- Контейнер для отображения календаря -->
         <div class="week-table" id="calendar"></div>
     </div>
 
     <div id="myModal" class="modal">
         <div class="modal-content">
+			<!-- Модальное окно для добавления мероприятия -->
             <span class="close">&times;</span>
             <h2>Добавить мероприятие</h2>
             <form id="eventForm">
@@ -230,20 +238,95 @@
             </form>
         </div>
     </div>
+	
+	<div id="editEventModal" class="modal">
+		<div class="modal-content">
+			<span class="close" id="closeEditModal">&times;</span>
+			<h2>Редактировать событие</h2>
+			<form id="editEventForm">
+				<label for="editStartTime">Время начала:</label>
+				<input type="time" id="editStartTime" required>
+				<label for="editEndTime">Время окончания:</label>
+				<input type="time" id="editEndTime" required>
+				<label for="editEventDescription">Описание:</label>
+				<input type="text" id="editEventDescription" placeholder="Описание мероприятия" required>
+				<button type="submit">Сохранить изменения</button>
+			</form>
+		</div>
+	</div>
 
+	
     <script>
-        const calendar = document.getElementById('calendar');
-        const weekInterval = document.getElementById('weekInterval');
-        let currentDate = new Date();
-        let selectedDayIndex = null;
-        let editingRow = null;
+        let db;	// Переменная для хранения базы данных IndexedDB
+        const events = {};	// Объект для хранения событий по датам
+		
+		// Функция для открытия базы данных IndexedDB
+        function openDatabase() {
+            const request = indexedDB.open('calendarDB', 1);
 
-        const events = JSON.parse(localStorage.getItem('events')) || {};
+            request.onupgradeneeded = function (e) {
+                db = e.target.result;
+                if (!db.objectStoreNames.contains('events')) {
+                    const objectStore = db.createObjectStore('events', { keyPath: 'date' });
+                    objectStore.createIndex('startTime', 'startTime', { unique: false });
+                }
+            };
 
-        function saveEvents() {
-            localStorage.setItem('events', JSON.stringify(events));
+            request.onsuccess = function (e) {
+                db = e.target.result;
+                loadEvents(); // Загружаем события из базы данных
+            };
+
+            request.onerror = function () {
+                console.error('Ошибка при открытии базы данных');
+            };
         }
+		
+		// Функция для загрузки событий из базы данных
+        function loadEvents() {
+            const transaction = db.transaction(['events'], 'readonly');
+            const objectStore = transaction.objectStore('events');
+            const request = objectStore.getAll();
 
+            request.onsuccess = function () {
+                const allEvents = request.result;
+                allEvents.forEach(event => {
+                    if (!events[event.date]) {
+                        events[event.date] = [];
+                    }
+                    events[event.date] = [...events[event.date], ...event.events];
+                });
+                renderCalendar();
+            };
+
+            request.onerror = function () {
+                console.error('Ошибка при загрузке событий');
+            };
+        }
+		
+		// Функция для сохранения событий в базе данных
+        function saveEvents() {
+            for (let date in events) {
+                const transaction = db.transaction(['events'], 'readwrite');
+                const objectStore = transaction.objectStore('events');
+
+                const eventData = {
+                    date: date,
+                    events: events[date]
+                };
+
+                const request = objectStore.put(eventData);
+
+                request.onsuccess = function () {
+                    console.log('События сохранены');
+                };
+
+                request.onerror = function () {
+                    console.error('Ошибка при сохранении событий');
+                };
+            }
+        }
+		
         function formatWeekInterval() {
             const startOfWeek = new Date(currentDate);
             const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
@@ -255,149 +338,227 @@
             const options = { day: 'numeric', month: 'short' };
             weekInterval.textContent = `${startOfWeek.toLocaleDateString('ru-RU', options)} - ${endOfWeek.toLocaleDateString('ru-RU', options)}`;
         }
-
+		
+		document.getElementById('weekInput').addEventListener('change', (e) => {
+			const [year, week] = e.target.value.split('-W');
+			const weekDate = new Date(year, 0, 1 + (week - 1) * 7); // Начало недели
+			displayWeek(getWeekStart(weekDate));
+		});
+		
+		// Функция для отображения календаря
         function renderCalendar() {
-            calendar.innerHTML = '';
-            const startOfWeek = new Date(currentDate);
-            const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
-            startOfWeek.setDate(currentDate.getDate() + dayShift);
+			calendar.innerHTML = '';
+			const startOfWeek = new Date(currentDate);
+			const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
+			startOfWeek.setDate(currentDate.getDate() + dayShift);
+			
+			// Генерация календаря на текущую неделю
+			for (let i = 0; i < 7; i++) {
+				const day = new Date(startOfWeek);
+				day.setDate(startOfWeek.getDate() + i);
+				const dayKey = day.toISOString().split('T')[0];
+				const dayTable = document.createElement('div');
+				dayTable.classList.add('day-table');
+				dayTable.innerHTML = `
+					<h3>${day.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })}</h3>
+					<table id="table-${dayKey}">
+						<thead><tr><th>Время</th><th>Событие</th><th>Действие</th></tr></thead>
+						<tbody></tbody>
+					</table>
+					<button class="clear-day-button" onclick="clearDay('${dayKey}')">Очистить день</button>
+					<button class="add-event" onclick="showAddEventModal('${dayKey}')">Добавить событие</button>
+				`;
+				calendar.appendChild(dayTable);
+				
+				// Добавление событий в таблицу
+				const dayEvents = events[dayKey] || [];
+				const tableBody = dayTable.querySelector('tbody');
+				dayEvents.forEach(event => {
+					const row = document.createElement('tr');
+					row.innerHTML = `
+						<td>${event.startTime} - ${event.endTime}</td>
+						<td>${event.description}</td>
+						<td>
+							<button class="edit-button" onclick="editEvent('${dayKey}', '${event.startTime}')">Изменить</button>
+							<button class="delete-button" onclick="deleteEvent('${dayKey}', '${event.startTime}')">Удалить</button>
+						</td>
+					`;
+					tableBody.appendChild(row);
+				});
+			}
 
-            for (let i = 0; i < 7; i++) {
-                const day = new Date(startOfWeek);
-                day.setDate(startOfWeek.getDate() + i);
-                const dayKey = day.toISOString().split('T')[0];
-                const dayTable = document.createElement('div');
-                dayTable.className = 'day-table';
-                dayTable.innerHTML = 
-                    `<h3>${day.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })}</h3>
-                    <div class="add-event">
-                        <button style="background-color: green;" onclick="openModal(${i})">Добавить мероприятие</button>
-                        <button class="clear-day-button" onclick="clearDay('${dayKey}')">Очистить день</button>
-                    </div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Время</th>
-                                <th>Описание</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="day-${i}"></tbody>
-                    </table>`;
-                calendar.appendChild(dayTable);
+			formatWeekInterval();
+		}
 
-                if (events[dayKey]) {
-                    const dayEvents = document.getElementById(`day-${i}`);
-                    const sortedEvents = events[dayKey].sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-                    sortedEvents.forEach(event => {
-                        const newRow = document.createElement('tr');
-                        newRow.innerHTML = 
-                            `<td>${event.startTime} - ${event.endTime}</td>
-                            <td>${event.description}</td>
-                            <td>
-                                <button class="delete-button" onclick="deleteEvent('${dayKey}', '${event.startTime}')">Удалить</button>
-                                <button style="background-color: orange;" onclick="editEvent('${dayKey}', '${event.startTime}')">Изменить</button>
-                            </td>`;
-                        dayEvents.appendChild(newRow);
-                    });
-                }
-            }
-        }
-
-        function openModal(dayIndex) {
-            selectedDayIndex = dayIndex;
-            editingRow = null;
-            document.getElementById('eventForm').reset();
-            document.getElementById('myModal').style.display = 'block';
-        }
-
-        function closeModal() {
-            document.getElementById('myModal').style.display = 'none';
-        }
-
-        function saveEvent(event) {
-            event.preventDefault();
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
-            const description = document.getElementById('eventDescription').value;
-
-            const startOfWeek = new Date(currentDate);
-            const dayShift = startOfWeek.getDay() === 0 ? -6 : 1 - startOfWeek.getDay();
-            startOfWeek.setDate(currentDate.getDate() + dayShift);
-            const eventDate = new Date(startOfWeek);
-            eventDate.setDate(startOfWeek.getDate() + selectedDayIndex);
-            const dayKey = eventDate.toISOString().split('T')[0];
-
-            if (!events[dayKey]) {
-                events[dayKey] = [];
-            }
-
-            if (editingRow) {
-                const eventIndex = events[dayKey].findIndex(evt => evt.startTime === editingRow);
-                if (eventIndex > -1) {
-                    events[dayKey][eventIndex] = { startTime, endTime, description };
-                }
-            } else {
-                events[dayKey].push({ startTime, endTime, description });
-            }
-
+        function clearDay(dayKey) {
+            events[dayKey] = [];
             saveEvents();
-            renderCalendar();
-            closeModal();
-        }
-
-        function editEvent(dayKey, startTime) {
-            selectedDayIndex = null;
-            editingRow = startTime;
-
-            const event = events[dayKey].find(evt => evt.startTime === startTime);
-            if (event) {
-                document.getElementById('startTime').value = event.startTime;
-                document.getElementById('endTime').value = event.endTime;
-                document.getElementById('eventDescription').value = event.description;
-                document.getElementById('myModal').style.display = 'block';
-            }
+            updateDayTable(dayKey);
         }
 
         function deleteEvent(dayKey, startTime) {
-            events[dayKey] = events[dayKey].filter(event => event.startTime !== startTime);
-            if (events[dayKey].length === 0) {
-                delete events[dayKey];
-            }
-
-            saveEvents();
-            renderCalendar();
-        }
-
-        function clearDay(dayKey) {
+        events[dayKey] = events[dayKey].filter(event => event.startTime !== startTime);
+        if (events[dayKey].length === 0) {
             delete events[dayKey];
-            saveEvents();
-            renderCalendar();
+        }
+        saveEvents(); // Сохраняем изменения в базе данных
+        updateDayTable(dayKey); // Обновляем таблицу для конкретного дня
         }
 
-        document.getElementById('eventForm').addEventListener('submit', saveEvent);
+        function updateDayTable(dayKey) {
+        const tableBody = document.querySelector(`#table-${dayKey} tbody`);
+        tableBody.innerHTML = ''; // Очищаем текущее содержимое таблицы
+    
+        const dayEvents = events[dayKey] || [];
+        dayEvents.forEach(event => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${event.startTime}</td>
+                <td>${event.description}</td>
+                <td><button class="delete-button" onclick="deleteEvent('${dayKey}', '${event.startTime}')">Удалить</button></td>
+            `;
+            tableBody.appendChild(row); // Добавляем новую строку в таблицу
+        });
+        }
+		
+		function updateDayTable(dayKey) {
+			const tableBody = document.querySelector(`#table-${dayKey} tbody`);
+			tableBody.innerHTML = ''; // Очищаем текущее содержимое таблицы
 
-        document.querySelector('.close').onclick = closeModal;
-        window.onclick = function(event) {
-            if (event.target === document.getElementById('myModal')) {
-                closeModal();
-            }
-        };
+			const dayEvents = events[dayKey] || [];
 
-        document.getElementById('prevWeek').onclick = function() {
+			// Сортируем события по времени начала
+			dayEvents.sort((a, b) => {
+				const timeA = new Date(`1970-01-01T${a.startTime}:00`);
+				const timeB = new Date(`1970-01-01T${b.startTime}:00`);
+				return timeA - timeB; // Сравниваем время
+			});
+
+			dayEvents.forEach(event => {
+				const row = document.createElement('tr');
+				row.innerHTML = `
+					<td>${event.startTime} - ${event.endTime}</td>
+					<td>${event.description}</td>
+					<td>
+						<button class="edit-button" onclick="editEvent('${dayKey}', '${event.startTime}')">Изменить</button>
+						<button class="delete-button" onclick="deleteEvent('${dayKey}', '${event.startTime}')">Удалить</button>
+					</td>
+				`;
+				tableBody.appendChild(row); // Добавляем новую строку в таблицу
+			});
+		}
+	
+		function editEvent(dayKey, startTime) {
+			const event = events[dayKey]?.find(e => e.startTime === startTime);
+			if (!event) {
+				alert('Событие не найдено');
+				return;
+			}
+
+			const modal = document.getElementById('myModal'); // Используем окно "Добавить событие"
+			const closeModal = document.querySelector('.close');
+			const eventForm = document.getElementById('eventForm');
+			const startTimeInput = document.getElementById('startTime');
+			const endTimeInput = document.getElementById('endTime');
+			const descriptionInput = document.getElementById('eventDescription');
+
+			// Заполняем поля модального окна текущими данными события
+			startTimeInput.value = event.startTime;
+			endTimeInput.value = event.endTime;
+			descriptionInput.value = event.description;
+
+			modal.style.display = 'block';
+
+			eventForm.onsubmit = function (e) {
+				e.preventDefault();
+
+				// Обновляем данные события
+				event.startTime = startTimeInput.value;
+				event.endTime = endTimeInput.value;
+				event.description = descriptionInput.value;
+
+				saveEvents(); // Сохраняем изменения в базе данных
+				updateDayTable(dayKey); // Обновляем таблицу для конкретного дня
+
+				modal.style.display = 'none';  // Закрыть модальное окно
+				eventForm.reset(); // Сбросить форму
+			};
+
+			closeModal.onclick = function () {
+				modal.style.display = 'none';
+				eventForm.reset();
+			};
+
+			window.onclick = function (event) {
+				if (event.target === modal) {
+					modal.style.display = 'none';
+					eventForm.reset();
+				}
+			};
+		}
+
+        function showAddEventModal(dayKey) {
+			const modal = document.getElementById('myModal');
+			const closeModal = document.querySelector('.close');
+			const eventForm = document.getElementById('eventForm');
+			const startTimeInput = document.getElementById('startTime');
+			const endTimeInput = document.getElementById('endTime');
+			const descriptionInput = document.getElementById('eventDescription');
+
+			modal.style.display = 'block';
+
+			eventForm.onsubmit = function (e) {
+				e.preventDefault();
+
+				const newEvent = {
+					startTime: startTimeInput.value,
+					endTime: endTimeInput.value,
+					description: descriptionInput.value
+				};
+
+				if (!events[dayKey]) {
+					events[dayKey] = [];
+				}
+
+				events[dayKey].push(newEvent);
+				saveEvents(); // Сохраняем события в базе данных
+				updateDayTable(dayKey); // Обновляем таблицу для конкретного дня
+
+				modal.style.display = 'none';  // Закрыть модальное окно
+				eventForm.reset(); // Сбросить форму
+			};
+
+			closeModal.onclick = function () {
+				modal.style.display = 'none';
+				eventForm.reset();
+			};
+
+			window.onclick = function (event) {
+				if (event.target === modal) {
+					modal.style.display = 'none';
+					eventForm.reset();
+				}
+			};
+		}
+
+        let currentDate = new Date();
+        const weekInterval = document.getElementById('weekInterval');
+        const prevWeekButton = document.getElementById('prevWeek');
+        const nextWeekButton = document.getElementById('nextWeek');
+        const calendar = document.getElementById('calendar');
+
+        prevWeekButton.addEventListener('click', function () {
             currentDate.setDate(currentDate.getDate() - 7);
-            formatWeekInterval();
             renderCalendar();
-        };
+        });
 
-        document.getElementById('nextWeek').onclick = function() {
+        nextWeekButton.addEventListener('click', function () {
             currentDate.setDate(currentDate.getDate() + 7);
-            formatWeekInterval();
             renderCalendar();
-        };
+        });
 
-        formatWeekInterval();
+        openDatabase();
         renderCalendar();
     </script>
 </body>
